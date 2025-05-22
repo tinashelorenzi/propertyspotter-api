@@ -10,6 +10,7 @@ from users.models import CustomUser
 import logging
 from rest_framework.permissions import BasePermission
 from django_filters import rest_framework as django_filters
+from rest_framework.exceptions import NotFound
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +115,13 @@ class UserUpdatesListView(generics.ListAPIView):
         logger.info(f"Fetching updates for user_id: {user_id}")
         logger.info(f"Requesting user: {self.request.user.id}, role: {self.request.user.role}")
         
-        # Check if the target user exists
+        # First check if the target user exists
         try:
             target_user = CustomUser.objects.get(id=user_id)
             logger.info(f"Target user found: {target_user.email}")
         except CustomUser.DoesNotExist:
-            logger.error(f"Target user with ID {user_id} does not exist")
-            return Update.objects.none()
+            logger.error(f"User with ID {user_id} does not exist")
+            raise NotFound(detail=f"User with ID {user_id} does not exist")
         
         # Base queryset excluding failed updates
         base_queryset = Update.objects.exclude(
@@ -133,9 +134,37 @@ class UserUpdatesListView(generics.ListAPIView):
             return base_queryset.filter(recipient_id=user_id)
         
         # Regular users can only view their own updates
-        if str(self.request.user.id) != user_id:
+        # Convert both IDs to strings for comparison
+        if str(self.request.user.id) != str(user_id):
             logger.warning(f"User {self.request.user.id} attempted to access updates for user {user_id}")
-            return Update.objects.none()
+            raise NotFound(detail="You don't have permission to view these updates")
             
         logger.info(f"User {self.request.user.id} accessing their own updates")
         return base_queryset.filter(recipient=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'data': serializer.data,
+                'message': 'Updates retrieved successfully'
+            })
+        except NotFound as e:
+            return Response({
+                'status': 'error',
+                'message': str(e.detail)
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error fetching updates: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while fetching updates'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
