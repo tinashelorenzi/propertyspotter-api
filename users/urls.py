@@ -4,7 +4,8 @@ from .views import (
     EmailVerificationView, 
     AgencyCreateView,
     EmailLoginView,
-    UserDetailView
+    UserDetailView,
+    UserProfileView
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path('agency/create/', AgencyCreateView.as_view(), name='agency-create'),
     path('login/', EmailLoginView.as_view(), name='user-login'),
     path('<int:id>/', UserDetailView.as_view(), name='user-detail'),
+    path('profile/', UserProfileView.as_view(), name='user-profile'),
 ] 

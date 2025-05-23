@@ -6,7 +6,7 @@ from users.models import CustomUser
 class LeadImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = LeadImage
-        fields = ['id', 'image', 'description', 'uploaded_at']
+        fields = ['image', 'description']
 
 class LeadListSerializer(serializers.ModelSerializer):
     images = LeadImageSerializer(many=True, read_only=True)

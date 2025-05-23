@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
@@ -13,7 +13,7 @@ from .serializers import (
     EmailAuthTokenSerializer,
     UserDetailSerializer
 )
-from .models import VerificationToken, Agency
+from .models import VerificationToken, Agency, CustomUser
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -113,3 +113,10 @@ class UserDetailView(generics.RetrieveAPIView):
     def get_object(self):
         obj = get_object_or_404(self.get_queryset(), id=self.kwargs["id"])
         return obj
+
+class UserProfileView(generics.RetrieveAPIView):
+    serializer_class = UserDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
