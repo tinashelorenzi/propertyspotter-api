@@ -6,8 +6,11 @@ from .views import (
     EmailLoginView,
     UserDetailView,
     UserProfileView,
-    UserProfileUpdateView
+    UserProfileUpdateView,
+    AgencyListView,
+    AgencyAgentsListView
 )
+from . import views
 
 urlpatterns = [
     path('register/', UserRegistrationView.as_view(), name='user-register'),
@@ -17,4 +20,8 @@ urlpatterns = [
     path('<int:id>/', UserDetailView.as_view(), name='user-detail'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
     path('profile/update/', UserProfileUpdateView.as_view(), name='user-profile-update'),
+    path('agencies/', AgencyListView.as_view(), name='agency-list'),
+    path('agencies/<uuid:agency_id>/agents/', AgencyAgentsListView.as_view(), name='agency-agents-list'),
+    path('invite-agent/', views.AgentInvitationView.as_view(), name='invite-agent'),
+    path('set-password/', views.SetPasswordView.as_view(), name='set-password'),
 ] 

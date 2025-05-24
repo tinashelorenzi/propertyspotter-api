@@ -3,6 +3,7 @@ from django.db import models
 import uuid
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 
 def get_default_expiry():
     return timezone.now() + timedelta(days=1)
@@ -140,3 +141,26 @@ class VerificationToken(models.Model):
 
     def is_expired(self):
         return timezone.now() > self.expires_at
+
+class InvitationToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20)
+    agency = models.ForeignKey('Agency', on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = get_random_string(64)
+        super().save(*args, **kwargs)
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"Invitation for {self.email} to {self.agency.name}"

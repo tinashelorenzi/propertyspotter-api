@@ -2,7 +2,13 @@ from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .models import Lead, LeadImage
-from .serializers import LeadSubmissionSerializer, LeadListSerializer, AgencyLeadsSerializer
+from .serializers import (
+    LeadSubmissionSerializer, 
+    LeadListSerializer, 
+    AgencyLeadsSerializer, 
+    LeadAssignmentSerializer,
+    LeadDetailSerializer
+)
 from rest_framework.permissions import BasePermission
 from django_filters import rest_framework as django_filters
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -23,21 +29,16 @@ class IsAgencyMember(BasePermission):
     Custom permission to only allow agency members to access agency leads
     """
     def has_permission(self, request, view):
-        logger.info("=== IsAgencyMember Permission Check ===")
-        logger.info(f"User ID: {request.user.id}")
-        logger.info(f"User Email: {request.user.email}")
-        logger.info(f"User Role: {request.user.role}")
-        logger.info(f"User Agency ID: {request.user.agency_id}")
-        logger.info(f"User Agency: {request.user.agency}")
-        logger.info(f"Is Authenticated: {request.user.is_authenticated}")
+        logger.info(f"Checking IsAgencyMember permission for user: {request.user.id}")
+        logger.info(f"User role: {request.user.role}")
+        logger.info(f"User agency: {request.user.agency}")
         
         has_permission = request.user and request.user.is_authenticated and (
             request.user.role == 'Admin' or 
             (request.user.role in ['Agent', 'Agency_Admin'] and request.user.agency is not None)
         )
         
-        logger.info(f"Permission Check Result: {has_permission}")
-        logger.info("=== End Permission Check ===")
+        logger.info(f"Permission granted: {has_permission}")
         return has_permission
 
 class LeadFilter(django_filters.FilterSet):
@@ -49,6 +50,66 @@ class LeadFilter(django_filters.FilterSet):
     class Meta:
         model = Lead
         fields = ['status', 'created_after', 'created_before', 'assigned']
+
+class LeadListView(generics.ListAPIView):
+    """
+    View for listing all leads
+    """
+    serializer_class = LeadListSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = LeadFilter
+    search_fields = ['first_name', 'last_name', 'email', 'phone', 'notes_text']
+    ordering_fields = ['created_at', 'status', 'assigned_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        logger.info(f"Fetching leads for user: {self.request.user.id}, role: {self.request.user.role}")
+        
+        # Base queryset
+        base_queryset = Lead.objects.all()
+        logger.info(f"Base queryset count: {base_queryset.count()}")
+        
+        # If user is admin, they can view all leads
+        if self.request.user.role == 'Admin':
+            logger.info("Admin user accessing all leads")
+            return base_queryset
+        
+        # If user is a spotter, they can only view their own leads
+        if self.request.user.role == 'Spotter':
+            logger.info(f"Spotter {self.request.user.id} accessing their leads")
+            return base_queryset.filter(spotter=self.request.user)
+        
+        # If user is an agent or agency admin, they can view their agency's leads
+        if self.request.user.role in ['Agent', 'Agency_Admin'] and self.request.user.agency:
+            logger.info(f"Agency member {self.request.user.id} accessing their agency's leads")
+            return base_queryset.filter(assigned_agency=self.request.user.agency)
+        
+        # Default to empty queryset for other roles
+        logger.warning(f"User {self.request.user.id} with role {self.request.user.role} has no permission to view leads")
+        return Lead.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'results': serializer.data,
+                'message': 'Leads retrieved successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error fetching leads: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while fetching leads'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class AgencyLeadsListView(generics.ListAPIView):
     serializer_class = AgencyLeadsSerializer
@@ -285,4 +346,148 @@ class SpotterLeadsListView(generics.ListAPIView):
             return Response({
                 'status': 'error',
                 'message': 'An error occurred while fetching leads'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class LeadAssignmentView(generics.UpdateAPIView):
+    """
+    View for assigning or reassigning a lead to an agent
+    """
+    serializer_class = LeadAssignmentSerializer
+    permission_classes = [IsAuthenticated, IsAgencyMember]
+    queryset = Lead.objects.all()
+    lookup_field = 'id'
+
+    def get_object(self):
+        lead_id = self.kwargs.get('id')
+        logger.info(f"=== Lead Assignment Request ===")
+        logger.info(f"Lead ID from URL: {lead_id}")
+        try:
+            lead = Lead.objects.get(id=lead_id)
+            logger.info(f"Found lead: {lead.id}")
+            logger.info(f"Current lead state - Agent: {lead.agent}, Agency: {lead.assigned_agency}")
+            return lead
+        except Lead.DoesNotExist:
+            logger.error(f"Lead with ID {lead_id} not found")
+            raise NotFound(detail=f"Lead with ID {lead_id} not found")
+
+    def update(self, request, *args, **kwargs):
+        logger.info(f"=== Processing Lead Assignment ===")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Raw request data: {request.data}")
+        logger.info(f"Request user: {request.user.id} ({request.user.email}), role: {request.user.role}")
+        
+        lead = self.get_object()
+        logger.info(f"Processing assignment for lead {lead.id}")
+        logger.info(f"Current lead state - Agent: {lead.agent}, Agency: {lead.assigned_agency}")
+
+        # Check if user has permission to assign this lead
+        if request.user.role == 'Admin':
+            logger.info("Admin user assigning lead")
+        elif str(request.user.agency_id) != str(lead.assigned_agency_id):
+            logger.warning(f"User {request.user.id} attempted to assign lead {lead.id} from different agency")
+            logger.warning(f"User's agency: {request.user.agency_id}, Lead's agency: {lead.assigned_agency_id}")
+            raise PermissionDenied(detail="You don't have permission to assign this lead")
+
+        # Validate the assignment data
+        logger.info("Validating assignment data...")
+        serializer = self.get_serializer(data=request.data, context={'lead': lead})
+        if not serializer.is_valid():
+            logger.error(f"Validation errors: {serializer.errors}")
+            raise serializers.ValidationError(serializer.errors)
+        logger.info(f"Validated data: {serializer.validated_data}")
+
+        # Get the agent
+        agent = CustomUser.objects.get(id=serializer.validated_data['agent_id'])
+        logger.info(f"Found agent: {agent.id} ({agent.email}), role: {agent.role}, agency: {agent.agency_id}")
+
+        # Update the lead
+        try:
+            logger.info("Updating lead...")
+            lead.agent = agent
+            if serializer.validated_data.get('notes'):
+                lead.notes_text = serializer.validated_data['notes']
+            lead.save()
+            logger.info(f"Successfully updated lead {lead.id}")
+            
+            # Verify the update
+            lead.refresh_from_db()
+            logger.info(f"Lead after update - Agent: {lead.agent}, Agency: {lead.assigned_agency}")
+        except Exception as e:
+            logger.error(f"Error updating lead: {str(e)}")
+            raise
+
+        # Return the updated lead
+        lead_serializer = LeadDetailSerializer(lead)
+        logger.info("=== Lead Assignment Complete ===")
+        return Response({
+            'status': 'success',
+            'message': 'Lead assigned successfully',
+            'lead': lead_serializer.data
+        })
+
+class LeadDetailView(generics.RetrieveAPIView):
+    """
+    View for retrieving detailed information about a specific lead
+    """
+    serializer_class = LeadDetailSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+
+    def get_object(self):
+        lead_id = self.kwargs.get('id')
+        try:
+            lead = Lead.objects.get(id=lead_id)
+            logger.info(f"Found lead: {lead.id}")
+            
+            # Check permissions
+            if self.request.user.role == 'Admin':
+                logger.info("Admin user accessing lead details")
+                return lead
+                
+            if self.request.user.role == 'Spotter':
+                if lead.spotter_id != self.request.user.id:
+                    logger.warning(f"Spotter {self.request.user.id} attempted to access lead {lead.id} from different spotter")
+                    raise PermissionDenied(detail="You don't have permission to view this lead")
+                logger.info(f"Spotter {self.request.user.id} accessing their lead")
+                return lead
+                
+            if self.request.user.role in ['Agent', 'Agency_Admin']:
+                if str(lead.assigned_agency_id) != str(self.request.user.agency_id):
+                    logger.warning(f"Agency member {self.request.user.id} attempted to access lead {lead.id} from different agency")
+                    raise PermissionDenied(detail="You don't have permission to view this lead")
+                logger.info(f"Agency member {self.request.user.id} accessing their agency's lead")
+                return lead
+                
+            logger.warning(f"User {self.request.user.id} with role {self.request.user.role} has no permission to view lead")
+            raise PermissionDenied(detail="You don't have permission to view this lead")
+            
+        except Lead.DoesNotExist:
+            logger.error(f"Lead with ID {lead_id} not found")
+            raise NotFound(detail=f"Lead with ID {lead_id} not found")
+
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            lead = self.get_object()
+            serializer = self.get_serializer(lead)
+            return Response({
+                'status': 'success',
+                'lead': serializer.data,
+                'message': 'Lead details retrieved successfully'
+            })
+        except NotFound as e:
+            return Response({
+                'status': 'error',
+                'message': str(e.detail)
+            }, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied as e:
+            return Response({
+                'status': 'error',
+                'message': str(e.detail)
+            }, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.error(f"Error fetching lead details: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while fetching lead details'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

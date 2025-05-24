@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import generics, status
+from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.conf import settings
@@ -12,17 +12,143 @@ from .serializers import (
     AgencySerializer, 
     EmailAuthTokenSerializer,
     UserDetailSerializer,
-    UserProfileUpdateSerializer
+    UserProfileUpdateSerializer,
+    AgencyAgentsSerializer,
+    AgentInvitationSerializer,
+    PasswordSetSerializer
 )
-from .models import VerificationToken, Agency, CustomUser
+from .models import VerificationToken, Agency, CustomUser, InvitationToken
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from django.shortcuts import get_object_or_404
+from rest_framework.permissions import BasePermission
+from rest_framework.exceptions import PermissionDenied, NotFound
+import logging
+from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
+
+class IsAgencyMember(BasePermission):
+    """
+    Custom permission to only allow agency members to access agency information
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and (
+            request.user.role == 'Admin' or 
+            (request.user.role in ['Agent', 'Agency_Admin'] and request.user.agency is not None)
+        )
+
+class AgencyAgentsListView(generics.ListAPIView):
+    serializer_class = AgencyAgentsSerializer
+    permission_classes = [IsAuthenticated, IsAgencyMember]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['email', 'username', 'first_name', 'last_name', 'phone']
+    ordering_fields = ['created_at', 'last_login', 'first_name', 'last_name']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        agency_id = self.kwargs.get('agency_id')
+        logger.info(f"Fetching agents for agency_id: {agency_id}")
+        logger.info(f"Requesting user: {self.request.user.id}, role: {self.request.user.role}")
+        
+        # First check if the agency exists
+        try:
+            agency = Agency.objects.get(id=agency_id)
+            logger.info(f"Agency found: {agency.name}")
+        except Agency.DoesNotExist:
+            logger.error(f"Agency with ID {agency_id} does not exist")
+            raise NotFound(detail=f"Agency with ID {agency_id} does not exist")
+        
+        # Base queryset - get all agents in the agency
+        base_queryset = CustomUser.objects.filter(
+            agency_id=agency_id,
+            role__in=['Agent', 'Agency_Admin']  # Only get agents and agency admins
+        )
+        logger.info(f"Base queryset count: {base_queryset.count()}")
+        
+        # If user is system admin, they can view any agency's agents
+        if self.request.user.role == 'Admin':
+            logger.info("Admin user accessing agency agents")
+            return base_queryset
+        
+        # Agency members can only view their own agency's agents
+        if str(self.request.user.agency_id) != str(agency_id):
+            logger.warning(f"User {self.request.user.id} attempted to access agents for agency {agency_id}")
+            raise PermissionDenied(detail="You don't have permission to view these agents")
+            
+        logger.info(f"User {self.request.user.id} accessing their agency's agents")
+        return base_queryset
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'results': serializer.data,
+                'message': 'Agency agents retrieved successfully'
+            })
+        except NotFound as e:
+            return Response({
+                'status': 'error',
+                'message': str(e.detail)
+            }, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied as e:
+            return Response({
+                'status': 'error',
+                'message': str(e.detail)
+            }, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.error(f"Error fetching agency agents: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while fetching agency agents'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AgencyListView(generics.ListAPIView):
+    """
+    View to list all agencies
+    """
+    queryset = Agency.objects.all()
+    serializer_class = AgencySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'email', 'phone', 'address']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'results': serializer.data,
+                'message': 'Agencies retrieved successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error fetching agencies: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while fetching agencies'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Create your views here.
 
@@ -141,3 +267,150 @@ class UserProfileUpdateView(generics.UpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+class AgentInvitationView(generics.CreateAPIView):
+    """
+    View for inviting an agent to join an agency
+    """
+    serializer_class = AgentInvitationSerializer
+    permission_classes = [IsAuthenticated, IsAgencyMember]
+
+    def create(self, request, *args, **kwargs):
+        logger.info(f"Processing agent invitation request from user {request.user.id}")
+        logger.info(f"Request data: {request.data}")
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Create invitation token
+        invitation = InvitationToken.objects.create(
+            email=serializer.validated_data['email'],
+            first_name=serializer.validated_data['first_name'],
+            last_name=serializer.validated_data['last_name'],
+            phone=serializer.validated_data['phone'],
+            agency=request.user.agency,
+            expires_at=timezone.now() + timedelta(days=7)  # Token expires in 7 days
+        )
+
+        # Send invitation email
+        try:
+            frontend_url = settings.FRONTEND_URL
+            invitation_url = f"{frontend_url}/set-password/{invitation.token}"
+            
+            subject = "You've been invited to join Property Spotter"
+            html_message = f"""
+            <h2>Welcome to Property Spotter!</h2>
+            <p>Hello {invitation.first_name},</p>
+            <p>You've been invited to join {invitation.agency.name} on Property Spotter.</p>
+            <p>Click the link below to set your password and complete your registration:</p>
+            <p><a href="{invitation_url}">{invitation_url}</a></p>
+            <p>This link will expire in 7 days.</p>
+            <p>If you didn't expect this invitation, please ignore this email.</p>
+            """
+            
+            send_mail(
+                subject=subject,
+                message=strip_tags(html_message),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[invitation.email],
+                html_message=html_message
+            )
+            
+            logger.info(f"Invitation email sent to {invitation.email}")
+            
+            return Response({
+                'status': 'success',
+                'message': 'Invitation sent successfully',
+                'data': {
+                    'email': invitation.email,
+                    'expires_at': invitation.expires_at
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error sending invitation email: {str(e)}")
+            invitation.delete()  # Clean up the invitation if email fails
+            return Response({
+                'status': 'error',
+                'message': 'Failed to send invitation email'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class SetPasswordView(generics.CreateAPIView):
+    """
+    View for setting password using invitation token
+    """
+    serializer_class = PasswordSetSerializer
+    permission_classes = []  # No authentication required
+
+    def create(self, request, *args, **kwargs):
+        logger.info("Processing password set request")
+        logger.info(f"Request data: {request.data}")
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            # Get and validate invitation token
+            invitation = InvitationToken.objects.get(
+                token=serializer.validated_data['token'],
+                is_used=False
+            )
+
+            if invitation.is_expired():
+                logger.warning(f"Expired token used: {invitation.token}")
+                return Response({
+                    'status': 'error',
+                    'message': 'Invitation link has expired'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Generate username from first and last name
+            base_username = f"{invitation.first_name.lower()}.{invitation.last_name.lower()}"
+            username = base_username
+            counter = 1
+            
+            # Ensure username is unique
+            while CustomUser.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            # Create the user
+            user = CustomUser.objects.create_user(
+                username=username,
+                email=invitation.email,
+                password=serializer.validated_data['password'],
+                first_name=invitation.first_name,
+                last_name=invitation.last_name,
+                phone=invitation.phone,
+                agency=invitation.agency,
+                role='Agent',
+                is_active=True
+            )
+
+            # Mark invitation as used
+            invitation.is_used = True
+            invitation.save()
+
+            logger.info(f"Successfully created user account for {user.email} with username {username}")
+
+            return Response({
+                'status': 'success',
+                'message': 'Password set successfully. You can now log in.',
+                'data': {
+                    'email': user.email,
+                    'username': username,
+                    'name': f"{user.first_name} {user.last_name}"
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        except InvitationToken.DoesNotExist:
+            logger.warning(f"Invalid token used: {serializer.validated_data['token']}")
+            return Response({
+                'status': 'error',
+                'message': 'Invalid or expired invitation link'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error setting password: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while setting your password'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

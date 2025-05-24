@@ -1,13 +1,28 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Agency, CustomUser, VerificationToken
+from .models import Agency, CustomUser, VerificationToken, InvitationToken
 from django.core.mail import send_mail
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from datetime import datetime, timedelta
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 User = get_user_model()
+
+class AgencyAgentsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing agents within an agency
+    """
+    class Meta:
+        model = CustomUser
+        fields = [
+            'id', 'email', 'username', 'first_name', 'last_name',
+            'phone', 'role', 'profile_image_url', 'created_at',
+            'is_active', 'profile_complete', 'last_login'
+        ]
+        read_only_fields = fields
 
 class UserDetailSerializer(serializers.ModelSerializer):
     agency_name = serializers.CharField(source='agency.name', read_only=True)
@@ -173,3 +188,30 @@ class EmailAuthTokenSerializer(serializers.Serializer):
             raise serializers.ValidationError('Must include "email" and "password".', code='authorization')
         attrs['user'] = user
         return attrs 
+
+class AgentInvitationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100)
+    phone = serializers.CharField(max_length=20)
+
+    def validate_email(self, value):
+        if CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+class PasswordSetSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError("Passwords do not match.")
+        
+        try:
+            validate_password(data['password'])
+        except ValidationError as e:
+            raise serializers.ValidationError({'password': list(e.messages)})
+        
+        return data 
