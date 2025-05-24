@@ -5,7 +5,8 @@ from .views import (
     AgencyCreateView,
     EmailLoginView,
     UserDetailView,
-    UserProfileView
+    UserProfileView,
+    UserProfileUpdateView
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('login/', EmailLoginView.as_view(), name='user-login'),
     path('<int:id>/', UserDetailView.as_view(), name='user-detail'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('profile/update/', UserProfileUpdateView.as_view(), name='user-profile-update'),
 ] 

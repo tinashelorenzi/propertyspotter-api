@@ -17,9 +17,56 @@ class UserDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'username', 'first_name', 'last_name',
             'phone', 'role', 'agency', 'agency_name', 'profile_image_url',
-            'created_at', 'is_active', 'profile_complete'
+            'created_at', 'is_active', 'profile_complete',
+            'bank_name', 'bank_branch_code', 'account_number',
+            'account_name', 'account_type'
         ]
         read_only_fields = fields  # All fields are read-only
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = CustomUser
+        fields = [
+            'first_name', 'last_name', 'phone', 'password',
+            'bank_name', 'bank_branch_code', 'account_number',
+            'account_name', 'account_type'
+        ]
+        extra_kwargs = {
+            'first_name': {'required': False},
+            'last_name': {'required': False},
+            'phone': {'required': False},
+            'password': {'required': False},
+            'bank_name': {'required': False},
+            'bank_branch_code': {'required': False},
+            'account_number': {'required': False},
+            'account_name': {'required': False},
+            'account_type': {'required': False}
+        }
+    
+    def update(self, instance, validated_data):
+        # Only update fields that are provided
+        if 'first_name' in validated_data:
+            instance.first_name = validated_data['first_name']
+        if 'last_name' in validated_data:
+            instance.last_name = validated_data['last_name']
+        if 'phone' in validated_data:
+            instance.phone = validated_data['phone']
+        if 'password' in validated_data:
+            instance.set_password(validated_data['password'])
+        if 'bank_name' in validated_data:
+            instance.bank_name = validated_data['bank_name']
+        if 'bank_branch_code' in validated_data:
+            instance.bank_branch_code = validated_data['bank_branch_code']
+        if 'account_number' in validated_data:
+            instance.account_number = validated_data['account_number']
+        if 'account_name' in validated_data:
+            instance.account_name = validated_data['account_name']
+        if 'account_type' in validated_data:
+            instance.account_type = validated_data['account_type']
+        instance.save()
+        return instance
 
 class AgencySerializer(serializers.ModelSerializer):
     class Meta:

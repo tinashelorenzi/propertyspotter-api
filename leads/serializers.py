@@ -27,41 +27,48 @@ class LeadListSerializer(serializers.ModelSerializer):
             'spotter_commission_amount', 'assigned_at', 'closed_at'
         ]
 
-class LeadSubmissionSerializer(serializers.ModelSerializer):
-    images = LeadImageSerializer(many=True, required=False)
-    requested_agent = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.filter(role='Agent'),
-        required=False,
-        allow_null=True
-    )
+class AgencyLeadsSerializer(serializers.ModelSerializer):
+    images = LeadImageSerializer(many=True, read_only=True)
+    spotter = UserDetailSerializer(read_only=True)
+    agent = UserDetailSerializer(read_only=True)
+    requested_agent = UserDetailSerializer(read_only=True)
+    property_details = serializers.SerializerMethodField()
     
     class Meta:
         model = Lead
         fields = [
-            'first_name', 'last_name', 'email', 'phone',
-            'notes_text', 'images', 'requested_agent'
+            'id', 'first_name', 'last_name', 'email', 'phone',
+            'status', 'notes_text', 'images', 'spotter', 'agent', 'requested_agent',
+            'agreed_commission_amount', 'spotter_commission_amount',
+            'created_at', 'updated_at', 'assigned_at', 'closed_at',
+            'property_details'
+        ]
+    
+    def get_property_details(self, obj):
+        if obj.property:
+            return {
+                'id': obj.property.id,
+                'title': obj.property.title,
+                'address': obj.property.address,
+                'price': obj.property.price,
+                'status': obj.property.status
+            }
+        return None
+
+class LeadSubmissionSerializer(serializers.ModelSerializer):
+    """
+    Simplified serializer for lead submission.
+    The actual lead creation logic is handled in the view.
+    """
+    class Meta:
+        model = Lead
+        fields = [
+            'first_name', 'last_name', 'email', 'phone', 'notes_text'
         ]
         extra_kwargs = {
             'first_name': {'required': True},
             'last_name': {'required': True},
             'email': {'required': True},
             'phone': {'required': True},
-            'notes_text': {'required': False},
-            'images': {'required': False},
-            'requested_agent': {'required': False}
+            'notes_text': {'required': False}
         }
-
-    def create(self, validated_data):
-        images_data = validated_data.pop('images', [])
-        
-        # Set the spotter to the current user
-        validated_data['spotter'] = self.context['request'].user
-        
-        # Create the lead
-        lead = Lead.objects.create(**validated_data)
-        
-        # Create associated images if any
-        for image_data in images_data:
-            LeadImage.objects.create(lead=lead, **image_data)
-        
-        return lead 

@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from properties.models import Property
 from django.utils import timezone
-from users.models import CustomUser
+from users.models import CustomUser, Agency
 
 class Lead(models.Model):
     """
@@ -50,6 +50,15 @@ class Lead(models.Model):
         related_name='requested_leads'
     )
     
+    # Agency relationship
+    assigned_agency = models.ForeignKey(
+        Agency,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_leads'
+    )
+    
     # Commission fields
     agreed_commission_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     spotter_commission_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -65,6 +74,7 @@ class Lead(models.Model):
 
     def assign_to_agent(self, agent):
         self.agent = agent
+        self.assigned_agency = agent.agency  # Set the assigned agency based on the agent's agency
         self.status = 'assigned'
         self.assigned_at = timezone.now()
         self.save()

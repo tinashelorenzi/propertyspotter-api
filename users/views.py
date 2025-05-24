@@ -11,7 +11,8 @@ from .serializers import (
     EmailVerificationSerializer, 
     AgencySerializer, 
     EmailAuthTokenSerializer,
-    UserDetailSerializer
+    UserDetailSerializer,
+    UserProfileUpdateSerializer
 )
 from .models import VerificationToken, Agency, CustomUser
 from django.contrib.auth import get_user_model
@@ -91,6 +92,18 @@ class EmailLoginView(generics.CreateAPIView):
         # Create or get token
         token, created = Token.objects.get_or_create(user=user)
         
+        # Prepare agency information
+        agency_info = None
+        if user.agency:
+            agency_info = {
+                'id': user.agency.id,
+                'name': user.agency.name,
+                'email': user.agency.email,
+                'phone': user.agency.phone,
+                'address': user.agency.address,
+                'license_valid_until': user.agency.license_valid_until
+            }
+        
         return Response({
             'token': token.key,
             'user': {
@@ -100,7 +113,8 @@ class EmailLoginView(generics.CreateAPIView):
                 'role': user.role,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
-                'is_active': user.is_active
+                'is_active': user.is_active,
+                'agency': agency_info
             }
         })
 
@@ -116,6 +130,13 @@ class UserDetailView(generics.RetrieveAPIView):
 
 class UserProfileView(generics.RetrieveAPIView):
     serializer_class = UserDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+class UserProfileUpdateView(generics.UpdateAPIView):
+    serializer_class = UserProfileUpdateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
