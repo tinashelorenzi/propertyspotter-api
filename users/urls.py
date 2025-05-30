@@ -8,7 +8,9 @@ from .views import (
     UserProfileView,
     UserProfileUpdateView,
     AgencyListView,
-    AgencyAgentsListView
+    AgencyAgentsListView,
+    DeactivateUserView,
+    ReactivateUserView
 )
 from . import views
 
@@ -17,11 +19,13 @@ urlpatterns = [
     path('verify-email/', EmailVerificationView.as_view(), name='verify-email'),
     path('agency/create/', AgencyCreateView.as_view(), name='agency-create'),
     path('login/', EmailLoginView.as_view(), name='user-login'),
-    path('<int:id>/', UserDetailView.as_view(), name='user-detail'),
+    path('<uuid:id>/', UserDetailView.as_view(), name='user-detail'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
     path('profile/update/', UserProfileUpdateView.as_view(), name='user-profile-update'),
     path('agencies/', AgencyListView.as_view(), name='agency-list'),
     path('agencies/<uuid:agency_id>/agents/', AgencyAgentsListView.as_view(), name='agency-agents-list'),
     path('invite-agent/', views.AgentInvitationView.as_view(), name='invite-agent'),
     path('set-password/', views.SetPasswordView.as_view(), name='set-password'),
+    path('<uuid:id>/deactivate/', DeactivateUserView.as_view(), name='deactivate-user'),
+    path('<uuid:id>/reactivate/', ReactivateUserView.as_view(), name='reactivate-user'),
 ] 

@@ -7,9 +7,9 @@ class PropertyImageInline(admin.TabularInline):
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ('title', 'address', 'price', 'status', 'created_at')
-    list_filter = ('status', 'created_at')
-    search_fields = ('title', 'address', 'description')
+    list_display = ('title', 'address', 'price', 'status', 'listing_url', 'created_at')
+    list_filter = ('status', 'created_at', 'property_type')
+    search_fields = ('title', 'address', 'description', 'listing_url')
     inlines = [PropertyImageInline]
     readonly_fields = ('created_at', 'updated_at')
 

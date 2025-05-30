@@ -414,3 +414,137 @@ class SetPasswordView(generics.CreateAPIView):
                 'status': 'error',
                 'message': 'An error occurred while setting your password'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class DeactivateUserView(generics.UpdateAPIView):
+    """
+    View for deactivating a user account
+    """
+    serializer_class = UserDetailSerializer
+    permission_classes = [IsAuthenticated, IsAgencyMember]
+    queryset = CustomUser.objects.all()
+    lookup_field = 'id'
+
+    def get_object(self):
+        user_id = self.kwargs.get('id')
+        logger.info(f"=== User Deactivation Request ===")
+        logger.info(f"Requesting user: {self.request.user.id} ({self.request.user.email}), role: {self.request.user.role}")
+        logger.info(f"Target user ID: {user_id}")
+
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            logger.info(f"Found user: {user.email}, role: {user.role}, agency: {user.agency_id}")
+
+            # Check permissions
+            if self.request.user.role == 'Admin':
+                logger.info("Admin user deactivating account")
+                return user
+
+            # Agency members can only deactivate users from their own agency
+            if str(self.request.user.agency_id) != str(user.agency_id):
+                logger.warning(f"User {self.request.user.id} attempted to deactivate user {user.id} from different agency")
+                raise PermissionDenied(detail="You don't have permission to deactivate this user")
+
+            # Agency admins can only deactivate agents
+            if self.request.user.role == 'Agency_Admin' and user.role != 'Agent':
+                logger.warning(f"Agency admin {self.request.user.id} attempted to deactivate non-agent user {user.id}")
+                raise PermissionDenied(detail="You can only deactivate agent accounts")
+
+            return user
+
+        except CustomUser.DoesNotExist:
+            logger.error(f"User with ID {user_id} not found")
+            raise NotFound(detail=f"User with ID {user_id} not found")
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        logger.info(f"Deactivating user: {user.email}")
+
+        try:
+            user.is_active = False
+            user.save()
+            logger.info(f"Successfully deactivated user {user.id}")
+
+            return Response({
+                'status': 'success',
+                'message': 'User account deactivated successfully',
+                'data': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}",
+                    'is_active': user.is_active
+                }
+            })
+
+        except Exception as e:
+            logger.error(f"Error deactivating user: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while deactivating the user account'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ReactivateUserView(generics.UpdateAPIView):
+    """
+    View for reactivating a user account
+    """
+    serializer_class = UserDetailSerializer
+    permission_classes = [IsAuthenticated, IsAgencyMember]
+    queryset = CustomUser.objects.all()
+    lookup_field = 'id'
+
+    def get_object(self):
+        user_id = self.kwargs.get('id')
+        logger.info(f"=== User Reactivation Request ===")
+        logger.info(f"Requesting user: {self.request.user.id} ({self.request.user.email}), role: {self.request.user.role}")
+        logger.info(f"Target user ID: {user_id}")
+
+        try:
+            user = CustomUser.objects.get(id=user_id)
+            logger.info(f"Found user: {user.email}, role: {user.role}, agency: {user.agency_id}")
+
+            # Check permissions
+            if self.request.user.role == 'Admin':
+                logger.info("Admin user reactivating account")
+                return user
+
+            # Agency members can only reactivate users from their own agency
+            if str(self.request.user.agency_id) != str(user.agency_id):
+                logger.warning(f"User {self.request.user.id} attempted to reactivate user {user.id} from different agency")
+                raise PermissionDenied(detail="You don't have permission to reactivate this user")
+
+            # Agency admins can only reactivate agents
+            if self.request.user.role == 'Agency_Admin' and user.role != 'Agent':
+                logger.warning(f"Agency admin {self.request.user.id} attempted to reactivate non-agent user {user.id}")
+                raise PermissionDenied(detail="You can only reactivate agent accounts")
+
+            return user
+
+        except CustomUser.DoesNotExist:
+            logger.error(f"User with ID {user_id} not found")
+            raise NotFound(detail=f"User with ID {user_id} not found")
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        logger.info(f"Reactivating user: {user.email}")
+
+        try:
+            user.is_active = True
+            user.save()
+            logger.info(f"Successfully reactivated user {user.id}")
+
+            return Response({
+                'status': 'success',
+                'message': 'User account reactivated successfully',
+                'data': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}",
+                    'is_active': user.is_active
+                }
+            })
+
+        except Exception as e:
+            logger.error(f"Error reactivating user: {str(e)}")
+            return Response({
+                'status': 'error',
+                'message': 'An error occurred while reactivating the user account'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

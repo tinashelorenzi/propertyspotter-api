@@ -33,6 +33,7 @@ class Property(models.Model):
     square_feet = models.IntegerField(null=True, blank=True)
     lot_size = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     year_built = models.IntegerField(null=True, blank=True)
+    listing_url = models.URLField(max_length=500, null=True, blank=True, help_text="URL where the property is listed (e.g., Property24, PrivateProperty)")
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='properties')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
