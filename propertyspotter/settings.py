@@ -195,7 +195,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 # Twilio Configuration
 ACCOUNT_SID = 'ACbb95418e6cb8c2b81fd054e3aded8bfe'
-AUTH_TOKEN = '7ccce8982238387e47fcf5e3bfa20db7'
+
 WHATSAPP_FROM = 'whatsapp:+27872502209'
 
 # CKEditor Configuration
