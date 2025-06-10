@@ -195,14 +195,40 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 # Twilio Configuration
 ACCOUNT_SID = 'ACbb95418e6cb8c2b81fd054e3aded8bfe'
-
+AUTH_TOKEN = '7ccce8982238387e47fcf5e3bfa20db7'
 WHATSAPP_FROM = 'whatsapp:+27872502209'
 
 # CKEditor Configuration
-CKEDITOR_UPLOAD_PATH = "uploads/blog/"
 CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+CKEDITOR_5_UPLOAD_PATH = "uploads/blog/"
 CKEDITOR_IMAGE_BACKEND = "pillow"
 CKEDITOR_ALLOW_NONIMAGE_FILES = False
+CUSTOM_COLOR_PALETTE = [
+    {
+        'color': 'hsl(4, 90%, 58%)',
+        'label': 'Red'
+    },
+    {
+        'color': 'hsl(340, 82%, 52%)',
+        'label': 'Pink'
+    },
+    {
+        'color': 'hsl(291, 64%, 42%)',
+        'label': 'Purple'
+    },
+    {
+        'color': 'hsl(262, 52%, 47%)',
+        'label': 'Deep Purple'
+    },
+    {
+        'color': 'hsl(231, 48%, 48%)',
+        'label': 'Indigo'
+    },
+    {
+        'color': 'hsl(207, 90%, 54%)',
+        'label': 'Blue'
+    },
+]
 CKEDITOR_5_CONFIGS = {
     'default': {
         'toolbar': [
@@ -322,33 +348,6 @@ CKEDITOR_5_CONFIGS = {
         }
     }
 }
-
-customColorPalette = [
-    {
-        'color': 'hsl(4, 90%, 58%)',
-        'label': 'Red'
-    },
-    {
-        'color': 'hsl(340, 82%, 52%)',
-        'label': 'Pink'
-    },
-    {
-        'color': 'hsl(291, 64%, 42%)',
-        'label': 'Purple'
-    },
-    {
-        'color': 'hsl(262, 52%, 47%)',
-        'label': 'Deep Purple'
-    },
-    {
-        'color': 'hsl(231, 48%, 48%)',
-        'label': 'Indigo'
-    },
-    {
-        'color': 'hsl(207, 90%, 54%)',
-        'label': 'Blue'
-    },
-]
 
 # Meta (SEO) Configuration
 META_SITE_PROTOCOL = 'https'

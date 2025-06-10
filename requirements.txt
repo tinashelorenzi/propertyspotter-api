@@ -8,10 +8,13 @@ certifi==2025.4.26
 charset-normalizer==3.4.2
 Django==5.0.2
 django-ckeditor==6.7.3
+django-ckeditor-5==0.2.12
 django-cors-headers==4.3.1
 django-extensions==4.1
 django-filter==23.5
 django-js-asset==3.1.2
+django-meta==2.4.1
+django-taggit==5.0.1
 djangorestframework==3.14.0
 frozenlist==1.6.0
 idna==3.10
@@ -27,8 +30,3 @@ twilio==9.6.1
 tzdata==2025.2
 urllib3==2.4.0
 yarl==1.20.0
-
-# NEW PACKAGES FOR BLOG
-django-ckeditor-5==0.2.12
-django-taggit==5.0.1
-django-meta==2.4.1
