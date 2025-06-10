@@ -218,10 +218,11 @@ class LeadSubmissionView(generics.CreateAPIView):
             'street_address': request.data.get('street_address'),
             'suburb': request.data.get('suburb'),
             'notes_text': request.data.get('notes_text', ''),
+            'preferred_agent': request.data.get('preferred_agent', ''),
         }
         
         # Validate required fields
-        required_fields = ['first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb']
+        required_fields = ['first_name', 'last_name', 'phone', 'street_address', 'suburb']
         missing_fields = [field for field in required_fields if not lead_data.get(field)]
         
         if missing_fields:
@@ -289,12 +290,25 @@ class LeadSubmissionView(generics.CreateAPIView):
                     'street_address': lead.street_address,
                     'suburb': lead.suburb,
                     'notes_text': lead.notes_text,
+                    'preferred_agent': lead.preferred_agent,
                     'status': lead.status,
                     'images': created_images,
                     'created_at': lead.created_at.isoformat()
                 }
             }
-            
+            # Send whatsapp message to +27798557301
+            send_whatsapp_message(
+                phone_number='+27798557301',
+                template_name='notify_manager_spotter_create',
+                variables={
+                    '1': f"{request.user.first_name} {request.user.last_name}",
+                    '2': f"{lead.street_address}",
+                    '3': f"{lead.suburb}",
+                    '4': f"{lead.preferred_agent}",
+                }
+            )
+            logger.info(f"Sent WhatsApp notification to manager {request.user.id}")
+
             logger.info(f"Lead created successfully: {lead.id}")
             return Response(response_data, status=status.HTTP_201_CREATED)
             
@@ -456,9 +470,20 @@ class LeadAssignmentView(generics.UpdateAPIView):
                         }
                     )
                     logger.info(f"Sent WhatsApp notification to spotter {lead.spotter.id}")
+
+                    # Send whatsapp message to agent
+                    send_whatsapp_message(
+                        phone_number='+27798557301',
+                        template_name='notify_agent_lead_assigned',
+                        variables={
+                            '1': f"{agent.first_name}",
+                            '2': f"{agent.last_name}"
+                        }
+                    )
                 except Exception as e:
                     logger.error(f"Failed to send WhatsApp notification: {str(e)}")
                     # Don't fail the assignment if WhatsApp fails
+            # Send whatsapp message to +27798557301
 
         except Exception as e:
             logger.error(f"Error updating lead: {str(e)}")

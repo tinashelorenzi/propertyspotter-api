@@ -95,3 +95,4 @@ local_settings.py
 Thumbs.db 
 twilio_test.py
 updates/twilio_handler.py
+propertyspotter/settings.py

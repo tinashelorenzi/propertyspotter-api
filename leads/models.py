@@ -21,13 +21,18 @@ class Lead(models.Model):
     # Basic lead information
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    email = models.EmailField()
+    email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=20)
     street_address = models.CharField(max_length=255, help_text="Street address of the property", null=True, blank=True)
     suburb = models.CharField(max_length=100, help_text="Suburb or town of the property", null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
     notes_text = models.TextField(blank=True)
     is_accepted = models.BooleanField(default=False, help_text="Whether the agent has accepted this lead")
+    preferred_agent = models.CharField(
+        max_length=255, 
+        blank=True, 
+        help_text="Spotter's preferred agent (free text)"
+    )
     
     # Property information (minimal, to be filled by agent)
     property = models.ForeignKey(Property, on_delete=models.SET_NULL, null=True, blank=True, related_name='leads')

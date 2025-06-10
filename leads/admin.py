@@ -13,12 +13,12 @@ class LeadNoteInline(admin.TabularInline):
 class LeadAdmin(admin.ModelAdmin):
     list_display = ('id', 'first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb', 'status', 'created_at')
     list_filter = ('status', 'created_at')
-    search_fields = ('first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb')
+    search_fields = ('first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb', 'preferred_agent')
     inlines = [LeadImageInline, LeadNoteInline]
     readonly_fields = ('created_at', 'updated_at', 'assigned_at', 'accepted_at', 'closed_at')
     fieldsets = (
         ('Basic Information', {
-            'fields': ('first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb', 'notes_text')
+            'fields': ('first_name', 'last_name', 'email', 'phone', 'street_address', 'suburb', 'notes_text', 'preferred_agent')
         }),
         ('Status', {
             'fields': ('status', 'is_accepted')
