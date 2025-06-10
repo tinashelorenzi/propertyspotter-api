@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
+
 # Load environment variables
 load_dotenv()
 
@@ -48,6 +49,11 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'django_filters',
+
+    'django_ckeditor_5',           # WYSIWYG editor
+    'ckeditor_uploader',  # File upload support for CKEditor
+    'taggit',            # Tags for blog posts
+    'meta', 
     
     # Local apps
     'api',
@@ -56,6 +62,7 @@ INSTALLED_APPS = [
     'leads',
     'commissions',
     'updates',
+    'blog',
 ]
 
 MIDDLEWARE = [
@@ -187,6 +194,166 @@ DEFAULT_FROM_EMAIL="agent@propertyspotter.co.za"
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 # Twilio Configuration
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '')
-TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER', '')
+ACCOUNT_SID = 'ACbb95418e6cb8c2b81fd054e3aded8bfe'
+AUTH_TOKEN = '7ccce8982238387e47fcf5e3bfa20db7'
+WHATSAPP_FROM = 'whatsapp:+27872502209'
+
+# CKEditor Configuration
+CKEDITOR_UPLOAD_PATH = "uploads/blog/"
+CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+CKEDITOR_IMAGE_BACKEND = "pillow"
+CKEDITOR_ALLOW_NONIMAGE_FILES = False
+CKEDITOR_5_CONFIGS = {
+    'default': {
+        'toolbar': [
+            'heading', '|',
+            'bold', 'italic', 'link',
+            'bulletedList', 'numberedList', 'blockQuote', 'imageUpload', '|',
+            'outdent', 'indent', '|',
+            'insertTable', 'tableColumn', 'tableRow', 'mergeTableCells', '|',
+            'undo', 'redo'
+        ],
+        'height': '500px',
+        'width': '100%',
+        'image': {
+            'toolbar': [
+                'imageTextAlternative', '|',
+                'imageStyle:alignLeft',
+                'imageStyle:alignRight',
+                'imageStyle:alignCenter',
+                'imageStyle:side', '|'
+            ],
+            'styles': [
+                'full',
+                'side',
+                'alignLeft',
+                'alignRight',
+                'alignCenter',
+            ]
+        },
+        'table': {
+            'contentToolbar': [
+                'tableColumn', 'tableRow', 'mergeTableCells',
+                'tableProperties', 'tableCellProperties'
+            ],
+            'tableProperties': {
+                'borderColors': CUSTOM_COLOR_PALETTE,
+                'backgroundColors': CUSTOM_COLOR_PALETTE
+            },
+            'tableCellProperties': {
+                'borderColors': CUSTOM_COLOR_PALETTE,
+                'backgroundColors': CUSTOM_COLOR_PALETTE
+            }
+        },
+        'heading': {
+            'options': [
+                { 'model': 'paragraph', 'title': 'Paragraph', 'class': 'ck-heading_paragraph' },
+                { 'model': 'heading1', 'view': 'h1', 'title': 'Heading 1', 'class': 'ck-heading_heading1' },
+                { 'model': 'heading2', 'view': 'h2', 'title': 'Heading 2', 'class': 'ck-heading_heading2' },
+                { 'model': 'heading3', 'view': 'h3', 'title': 'Heading 3', 'class': 'ck-heading_heading3' }
+            ]
+        }
+    },
+    'extends': {
+        'blockToolbar': [
+            'paragraph', 'heading1', 'heading2', 'heading3',
+            '|',
+            'bulletedList', 'numberedList',
+            '|',
+            'blockQuote',
+        ],
+        'toolbar': [
+            'heading', '|',
+            'outdent', 'indent', '|',
+            'bold', 'italic', 'link', 'underline', 'strikethrough',
+            'code', 'subscript', 'superscript', 'highlight', '|',
+            'codeBlock', 'sourceEditing', 'insertImage',
+            'bulletedList', 'numberedList', 'todoList', '|',
+            'blockQuote', 'imageUpload', '|',
+            'fontSize', 'fontFamily', 'fontColor', 'fontBackgroundColor',
+            'mediaEmbed', 'removeFormat',
+            'insertTable',
+        ],
+        'image': {
+            'toolbar': [
+                'imageTextAlternative', '|',
+                'imageStyle:alignLeft',
+                'imageStyle:alignRight',
+                'imageStyle:alignCenter',
+                'imageStyle:side', '|',
+                'toggleImageCaption', 'imageResize'
+            ],
+            'styles': [
+                'full',
+                'side',
+                'alignLeft',
+                'alignRight',
+                'alignCenter',
+            ]
+        },
+        'table': {
+            'contentToolbar': [
+                'tableColumn', 'tableRow', 'mergeTableCells',
+                'tableProperties', 'tableCellProperties'
+            ],
+            'tableProperties': {
+                'borderColors': CUSTOM_COLOR_PALETTE,
+                'backgroundColors': CUSTOM_COLOR_PALETTE
+            },
+            'tableCellProperties': {
+                'borderColors': CUSTOM_COLOR_PALETTE,
+                'backgroundColors': CUSTOM_COLOR_PALETTE
+            }
+        },
+        'heading': {
+            'options': [
+                { 'model': 'paragraph', 'title': 'Paragraph', 'class': 'ck-heading_paragraph' },
+                { 'model': 'heading1', 'view': 'h1', 'title': 'Heading 1', 'class': 'ck-heading_heading1' },
+                { 'model': 'heading2', 'view': 'h2', 'title': 'Heading 2', 'class': 'ck-heading_heading2' },
+                { 'model': 'heading3', 'view': 'h3', 'title': 'Heading 3', 'class': 'ck-heading_heading3' }
+            ]
+        },
+        'list': {
+            'properties': {
+                'styles': True,
+                'startIndex': True,
+                'reversed': True,
+            }
+        }
+    }
+}
+
+customColorPalette = [
+    {
+        'color': 'hsl(4, 90%, 58%)',
+        'label': 'Red'
+    },
+    {
+        'color': 'hsl(340, 82%, 52%)',
+        'label': 'Pink'
+    },
+    {
+        'color': 'hsl(291, 64%, 42%)',
+        'label': 'Purple'
+    },
+    {
+        'color': 'hsl(262, 52%, 47%)',
+        'label': 'Deep Purple'
+    },
+    {
+        'color': 'hsl(231, 48%, 48%)',
+        'label': 'Indigo'
+    },
+    {
+        'color': 'hsl(207, 90%, 54%)',
+        'label': 'Blue'
+    },
+]
+
+# Meta (SEO) Configuration
+META_SITE_PROTOCOL = 'https'
+META_SITE_DOMAIN = 'propertyspotter.co.za'
+META_SITE_TYPE = 'website'
+META_SITE_NAME = 'PropertySpotter'
+META_INCLUDE_KEYWORDS = ['property', 'real estate', 'south africa', 'leads']
+META_DEFAULT_KEYWORDS = ['property spotting', 'real estate leads', 'property investment']

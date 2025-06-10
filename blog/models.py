@@ -5,7 +5,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
-from django_ckeditor_5.fields import CKEditor5Field
+from ckeditor_uploader.fields import RichTextUploadingField
 from taggit.managers import TaggableManager
 from meta.models import ModelMeta
 
@@ -51,9 +51,7 @@ class BlogPost(ModelMeta, models.Model):
         max_length=300, 
         help_text="Brief description of the post (max 300 characters)"
     )
-    content = CKEditor5Field(
-        'Content',
-        config_name='extends',
+    content = RichTextUploadingField(
         help_text="Main content of the blog post with rich text editor"
     )
     
