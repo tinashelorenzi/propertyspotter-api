@@ -10,7 +10,9 @@ from .views import (
     AgencyListView,
     AgencyAgentsListView,
     DeactivateUserView,
-    ReactivateUserView
+    ReactivateUserView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView
 )
 from . import views
 
@@ -28,4 +30,6 @@ urlpatterns = [
     path('set-password/', views.SetPasswordView.as_view(), name='set-password'),
     path('<uuid:id>/deactivate/', DeactivateUserView.as_view(), name='deactivate-user'),
     path('<uuid:id>/reactivate/', ReactivateUserView.as_view(), name='reactivate-user'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
 ] 

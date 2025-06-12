@@ -15,7 +15,9 @@ from .serializers import (
     UserProfileUpdateSerializer,
     AgencyAgentsSerializer,
     AgentInvitationSerializer,
-    PasswordSetSerializer
+    PasswordSetSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer
 )
 from .models import VerificationToken, Agency, CustomUser, InvitationToken
 from django.contrib.auth import get_user_model
@@ -548,3 +550,91 @@ class ReactivateUserView(generics.UpdateAPIView):
                 'status': 'error',
                 'message': 'An error occurred while reactivating the user account'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class PasswordResetRequestView(generics.GenericAPIView):
+    """
+    View for requesting a password reset
+    """
+    serializer_class = PasswordResetRequestSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            user = User.objects.get(email=serializer.validated_data['email'])
+            # Create verification token
+            token = VerificationToken.objects.create(user=user)
+            
+            # Send password reset email
+            context = {
+                'user': user,
+                'reset_url': f"{settings.FRONTEND_URL}/reset-password/{token.token}"
+            }
+            html_message = render_to_string('users/email/password_reset_email.html', context)
+            plain_message = strip_tags(html_message)
+            
+            send_mail(
+                'Reset your password',
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+
+            return Response({
+                'status': 'success',
+                'message': 'Password reset email has been sent.'
+            }, status=status.HTTP_200_OK)
+
+        except User.DoesNotExist:
+            # We don't want to reveal that the user doesn't exist
+            return Response({
+                'status': 'success',
+                'message': 'If an account exists with this email, you will receive a password reset link.'
+            }, status=status.HTTP_200_OK)
+
+class PasswordResetConfirmView(generics.GenericAPIView):
+    """
+    View for confirming password reset
+    """
+    serializer_class = PasswordResetConfirmSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            token = VerificationToken.objects.get(
+                token=serializer.validated_data['token'],
+                used=False
+            )
+
+            if token.is_expired():
+                return Response({
+                    'status': 'error',
+                    'message': 'Password reset link has expired'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update user's password
+            user = token.user
+            user.set_password(serializer.validated_data['password'])
+            user.save()
+
+            # Mark token as used
+            token.used = True
+            token.save()
+
+            return Response({
+                'status': 'success',
+                'message': 'Password has been reset successfully'
+            }, status=status.HTTP_200_OK)
+
+        except VerificationToken.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Invalid or expired password reset link'
+            }, status=status.HTTP_400_BAD_REQUEST)

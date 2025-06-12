@@ -215,3 +215,38 @@ class PasswordSetSerializer(serializers.Serializer):
             raise serializers.ValidationError({'password': list(e.messages)})
         
         return data 
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            User.objects.get(email=value)
+            return value
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No user found with this email address.")
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError("Passwords do not match.")
+        
+        try:
+            validate_password(data['password'])
+        except ValidationError as e:
+            raise serializers.ValidationError({'password': list(e.messages)})
+        
+        return data
+
+    def validate_token(self, value):
+        try:
+            token = VerificationToken.objects.get(token=value, used=False)
+            if token.is_expired():
+                raise serializers.ValidationError("Token has expired")
+            return value
+        except VerificationToken.DoesNotExist:
+            raise serializers.ValidationError("Invalid token") 
