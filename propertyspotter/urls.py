@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/updates/', include('updates.urls')),
     path('api/leads/', include('leads.urls')),
+    path('api/contact/', include('contact.urls')),
     path('ckeditor5/', include('django_ckeditor_5.urls')),  # For CKEditor 5 file uploads
     path('blog/', include('blog.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

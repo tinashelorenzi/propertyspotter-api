@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'commissions',
     'updates',
     'blog',
+    'contact',
 ]
 
 MIDDLEWARE = [
@@ -189,6 +190,7 @@ EMAIL_USE_TLS=True
 EMAIL_HOST_USER="agent@propertyspotter.co.za"
 EMAIL_HOST_PASSWORD="@flm*q02G)-P"
 DEFAULT_FROM_EMAIL="agent@propertyspotter.co.za"
+ADMIN_EMAIL="info@propertyspotter.co.za"
 
 # Frontend URL for email verification
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
