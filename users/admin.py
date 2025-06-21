@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Agency, VerificationToken
+from .models import CustomUser, Agency, VerificationToken, InvitationToken
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -36,3 +36,10 @@ class VerificationTokenAdmin(admin.ModelAdmin):
     list_display = ('user', 'token', 'created_at', 'used')
     search_fields = ('user__email', 'token')
     list_filter = ('used', 'created_at')
+
+@admin.register(InvitationToken)
+class InvitationTokenAdmin(admin.ModelAdmin):
+    list_display = ('email', 'first_name', 'last_name', 'agency', 'created_at', 'expires_at', 'is_used')
+    search_fields = ('email', 'first_name', 'last_name', 'agency__name')
+    list_filter = ('is_used', 'created_at', 'expires_at', 'agency')
+    readonly_fields = ('token', 'created_at')

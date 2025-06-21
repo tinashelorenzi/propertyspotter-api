@@ -83,7 +83,7 @@ ROOT_URLCONF = 'propertyspotter.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -359,3 +359,5 @@ META_SITE_TYPE = 'website'
 META_SITE_NAME = 'PropertySpotter'
 META_INCLUDE_KEYWORDS = ['property', 'real estate', 'south africa', 'leads']
 META_DEFAULT_KEYWORDS = ['property spotting', 'real estate leads', 'property investment']
+TURNSTILE_SECRET_KEY = os.getenv('TURNSTILE_SECRET_KEY', '1x0000000000000000000000000000000AA')
+TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '1x0000000000000000000000000000000AA')

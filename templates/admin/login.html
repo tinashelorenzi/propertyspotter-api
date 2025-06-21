@@ -1,0 +1,135 @@
+{% extends "admin/login.html" %}
+{% load static %}
+{% load i18n %}
+
+{% block title %}Property Spotter | Admin Login{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">Property Spotter Administration</h1>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<style>
+    .cf-turnstile {
+        margin: 20px 0;
+        display: flex;
+        justify-content: center;
+    }
+    .errorlist {
+        color: #ba2121;
+        background: #fff0f0;
+        padding: 10px;
+        border: 1px solid #ba2121;
+        border-radius: 4px;
+        margin: 10px 0;
+        list-style: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    {% if form.errors and not form.non_field_errors %}
+        <p class="errornote">
+            {% blocktrans count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktrans %}
+        </p>
+    {% endif %}
+
+    {% if form.non_field_errors %}
+        {% for error in form.non_field_errors %}
+            <p class="errornote">
+                {{ error }}
+            </p>
+        {% endfor %}
+    {% endif %}
+
+    <form action="{{ app_path }}" method="post" id="login-form">
+        {% csrf_token %}
+        <div class="form-row">
+            {{ form.username.errors }}
+            {{ form.username.label_tag }} {{ form.username }}
+        </div>
+        <div class="form-row">
+            {{ form.password.errors }}
+            {{ form.password.label_tag }} {{ form.password }}
+            <input type="hidden" name="next" value="{{ next }}">
+        </div>
+        
+        <!-- Cloudflare Turnstile Widget -->
+        {% if turnstile_site_key %}
+        <div class="cf-turnstile" 
+             data-sitekey="{{ turnstile_site_key }}"
+             data-callback="onTurnstileSuccess"
+             data-expired-callback="onTurnstileExpired"
+             data-error-callback="onTurnstileError">
+        </div>
+        {% else %}
+        <div style="color: red; text-align: center; margin: 20px 0;">
+            Turnstile site key not configured. Please check your settings.
+        </div>
+        {% endif %}
+        
+        <div class="submit-row">
+            <input type="submit" value="{% trans 'Log in' %}" id="login-button" {% if not turnstile_site_key %}disabled{% endif %}>
+        </div>
+    </form>
+</div>
+
+<script>
+    let turnstileToken = null;
+    
+    function onTurnstileSuccess(token) {
+        turnstileToken = token;
+        document.getElementById('login-button').disabled = false;
+        
+        // Add the token to the form
+        const form = document.getElementById('login-form');
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = 'cf-turnstile-response';
+        tokenInput.value = token;
+        form.appendChild(tokenInput);
+    }
+    
+    function onTurnstileExpired() {
+        turnstileToken = null;
+        document.getElementById('login-button').disabled = true;
+        
+        // Remove the token from the form
+        const tokenInput = document.querySelector('input[name="cf-turnstile-response"]');
+        if (tokenInput) {
+            tokenInput.remove();
+        }
+    }
+    
+    function onTurnstileError() {
+        turnstileToken = null;
+        document.getElementById('login-button').disabled = true;
+        
+        // Remove the token from the form
+        const tokenInput = document.querySelector('input[name="cf-turnstile-response"]');
+        if (tokenInput) {
+            tokenInput.remove();
+        }
+        
+        // Show error message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'errorlist';
+        errorDiv.innerHTML = '<li>Turnstile verification failed. Please try again.</li>';
+        
+        const form = document.getElementById('login-form');
+        const submitRow = form.querySelector('.submit-row');
+        form.insertBefore(errorDiv, submitRow);
+    }
+    
+    // Prevent form submission if Turnstile is not completed
+    document.getElementById('login-form').addEventListener('submit', function(e) {
+        if (!turnstileToken && '{{ turnstile_site_key }}') {
+            e.preventDefault();
+            alert('Please complete the Turnstile verification before logging in.');
+        }
+    });
+</script>
+{% endblock %} 
