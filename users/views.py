@@ -30,6 +30,7 @@ from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied, NotFound
 import logging
 from datetime import timedelta
+from security_handler.turnstile import verify_turnstile_token
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,19 @@ class UserRegistrationView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
+        turnstile_token = self.request.data.get('turnstileToken')
+        if not turnstile_token:
+            return Response({
+                'status': 'error',
+                'message': 'Turnstile token is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not verify_turnstile_token(turnstile_token, self.request.META.get('REMOTE_ADDR')):
+            return Response({
+                'status': 'error',
+                'message': 'Invalid turnstile token'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         user = serializer.save()
         # Create verification token
         token = VerificationToken.objects.create(user=user)
@@ -216,6 +230,20 @@ class EmailLoginView(generics.CreateAPIView):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
+        turnstile_token = request.data.get('turnstileToken')
+        if not turnstile_token:
+            return Response({
+                'status': 'error',
+                'message': 'Turnstile token is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Call the synchronous function directly
+        if not verify_turnstile_token(turnstile_token, request.META.get('REMOTE_ADDR')):
+            return Response({
+                'status': 'error',
+                'message': 'Invalid turnstile token'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         
         # Create or get token
         token, created = Token.objects.get_or_create(user=user)
