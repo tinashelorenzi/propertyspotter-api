@@ -33,6 +33,14 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']  # Configure this appropriately in production
 
+# Maximum size for files held in memory (1GB per file)
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB
+
+# Maximum total request size (5GB for multiple files)
+MAX_REQUEST_SIZE = 5 * 1024 * 1024 * 1024  # 5GB
+
+# Maximum number of files in a single request
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
 
 # Application definition
 
