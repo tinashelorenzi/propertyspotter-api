@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.utils.crypto import get_random_string
+from django.core.validators import RegexValidator
 
 def get_default_expiry():
     return timezone.now() + timedelta(days=1)
@@ -164,3 +165,22 @@ class InvitationToken(models.Model):
 
     def __str__(self):
         return f"Invitation for {self.email} to {self.agency.name}"
+
+class AdminLoginAttempt(models.Model):
+    """
+    Model to track admin login attempts for rate limiting
+    """
+    ip_address = models.GenericIPAddressField()
+    username = models.CharField(max_length=150)
+    attempted_at = models.DateTimeField(auto_now_add=True)
+    success = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'admin_login_attempts'
+        indexes = [
+            models.Index(fields=['ip_address', 'attempted_at']),
+            models.Index(fields=['username', 'attempted_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.ip_address} - {self.username} - {'Success' if self.success else 'Failed'} at {self.attempted_at}"

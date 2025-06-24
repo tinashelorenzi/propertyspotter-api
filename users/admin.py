@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Agency, VerificationToken, InvitationToken
+from .models import CustomUser, Agency, VerificationToken, InvitationToken, AdminLoginAttempt
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -43,3 +43,17 @@ class InvitationTokenAdmin(admin.ModelAdmin):
     search_fields = ('email', 'first_name', 'last_name', 'agency__name')
     list_filter = ('is_used', 'created_at', 'expires_at', 'agency')
     readonly_fields = ('token', 'created_at')
+
+@admin.register(AdminLoginAttempt)
+class AdminLoginAttemptAdmin(admin.ModelAdmin):
+    list_display = ('ip_address', 'username', 'success', 'attempted_at')
+    list_filter = ('success', 'attempted_at', 'ip_address')
+    search_fields = ('ip_address', 'username')
+    readonly_fields = ('ip_address', 'username', 'attempted_at', 'success')
+    ordering = ('-attempted_at',)
+    
+    def has_add_permission(self, request):
+        return False  # Prevent manual creation of login attempts
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Prevent editing of login attempts

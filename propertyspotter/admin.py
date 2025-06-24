@@ -6,14 +6,16 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.conf import settings
-from security_handler.turnstile import verify_turnstile_token
+from django.utils import timezone
+from datetime import timedelta
+from users.models import AdminLoginAttempt
 import logging
 
 logger = logging.getLogger(__name__)
 
-class TurnstileAdminAuthenticationForm(AdminAuthenticationForm):
+class RateLimitedAdminAuthenticationForm(AdminAuthenticationForm):
     """
-    Custom authentication form that includes Turnstile verification
+    Custom authentication form with rate limiting
     """
     
     def clean(self):
@@ -22,11 +24,6 @@ class TurnstileAdminAuthenticationForm(AdminAuthenticationForm):
         password = cleaned_data.get('password')
         
         if username and password:
-            # Verify Turnstile token
-            turnstile_response = self.data.get('cf-turnstile-response')
-            if not turnstile_response:
-                raise self.get_invalid_login_error()
-            
             # Get client IP from request
             request = getattr(self, 'request', None)
             if request:
@@ -34,17 +31,33 @@ class TurnstileAdminAuthenticationForm(AdminAuthenticationForm):
             else:
                 client_ip = '127.0.0.1'  # Fallback for local development
             
-            # Verify the Turnstile token
-            if not verify_turnstile_token(turnstile_response, client_ip):
-                logger.warning(f"Invalid Turnstile token for admin login attempt from IP: {client_ip}")
+            # Check if IP is locked out
+            if self.is_ip_locked_out(client_ip):
+                logger.warning(f"Admin login attempt from locked out IP: {client_ip}")
+                raise self.get_invalid_login_error()
+            
+            # Check if username is locked out
+            if self.is_username_locked_out(username):
+                logger.warning(f"Admin login attempt for locked out username: {username}")
                 raise self.get_invalid_login_error()
             
             # Authenticate user
             self.user_cache = authenticate(self.request, username=username, password=password)
+            
+            # Record the login attempt
+            success = self.user_cache is not None
+            AdminLoginAttempt.objects.create(
+                ip_address=client_ip,
+                username=username,
+                success=success
+            )
+            
             if self.user_cache is None:
+                logger.warning(f"Failed admin login attempt for username: {username} from IP: {client_ip}")
                 raise self.get_invalid_login_error()
             else:
                 self.confirm_login_allowed(self.user_cache)
+                logger.info(f"Successful admin login for username: {username} from IP: {client_ip}")
         
         return cleaned_data
     
@@ -58,29 +71,47 @@ class TurnstileAdminAuthenticationForm(AdminAuthenticationForm):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
-
-class TurnstileAdminSite(admin.AdminSite):
-    """
-    Custom admin site with Turnstile verification
-    """
-    login_form = TurnstileAdminAuthenticationForm
     
-    def login(self, request, extra_context=None):
+    def is_ip_locked_out(self, ip_address):
         """
-        Override the login method to add Turnstile site key to context
+        Check if an IP address is locked out due to too many failed attempts
         """
-        extra_context = extra_context or {}
-        turnstile_site_key = getattr(settings, 'TURNSTILE_SITE_KEY', '')
-        extra_context['turnstile_site_key'] = turnstile_site_key
-        logger.info(f"Turnstile site key: {turnstile_site_key}")
-        return super().login(request, extra_context)
+        # Check for failed attempts in the last 10 minutes
+        cutoff_time = timezone.now() - timedelta(minutes=10)
+        failed_attempts = AdminLoginAttempt.objects.filter(
+            ip_address=ip_address,
+            success=False,
+            attempted_at__gte=cutoff_time
+        ).count()
+        
+        return failed_attempts >= 6
+    
+    def is_username_locked_out(self, username):
+        """
+        Check if a username is locked out due to too many failed attempts
+        """
+        # Check for failed attempts in the last 10 minutes
+        cutoff_time = timezone.now() - timedelta(minutes=10)
+        failed_attempts = AdminLoginAttempt.objects.filter(
+            username=username,
+            success=False,
+            attempted_at__gte=cutoff_time
+        ).count()
+        
+        return failed_attempts >= 6
+
+class RateLimitedAdminSite(admin.AdminSite):
+    """
+    Custom admin site with rate limiting
+    """
+    login_form = RateLimitedAdminAuthenticationForm
 
 # Create the custom admin site instance
-admin_site = TurnstileAdminSite(name='turnstile_admin')
+admin_site = RateLimitedAdminSite(name='rate_limited_admin')
 
 # Import and register all models from existing apps
-from users.models import CustomUser, Agency, VerificationToken, InvitationToken
-from users.admin import CustomUserAdmin, AgencyAdmin, VerificationTokenAdmin, InvitationTokenAdmin
+from users.models import CustomUser, Agency, VerificationToken, InvitationToken, AdminLoginAttempt
+from users.admin import CustomUserAdmin, AgencyAdmin, VerificationTokenAdmin, InvitationTokenAdmin, AdminLoginAttemptAdmin
 from blog.models import BlogPost, BlogCategory
 from blog.admin import BlogPostAdmin, BlogCategoryAdmin
 from contact.models import ContactEntry
@@ -101,6 +132,7 @@ admin_site.register(CustomUser, CustomUserAdmin)
 admin_site.register(Agency, AgencyAdmin)
 admin_site.register(VerificationToken, VerificationTokenAdmin)
 admin_site.register(InvitationToken, InvitationTokenAdmin)
+admin_site.register(AdminLoginAttempt, AdminLoginAttemptAdmin)
 admin_site.register(BlogPost, BlogPostAdmin)
 admin_site.register(BlogCategory, BlogCategoryAdmin)
 admin_site.register(ContactEntry, ContactEntryAdmin)
