@@ -1,15 +1,76 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.utils.safestring import mark_safe
 from django import forms
-from django.core.files.uploadedfile import InMemoryUploadedFile, TemporaryUploadedFile
+from django.forms.widgets import Widget
+from django.utils.safestring import mark_safe
 from .models import PropertyListing, PropertyImage
-from .widgets import MultipleImagePreviewWidget
+
+
+class MultipleFileInput(Widget):
+    """Custom widget that supports multiple file selection"""
+    
+    def __init__(self, attrs=None):
+        if attrs is None:
+            attrs = {}
+        super().__init__(attrs)
+    
+    def render(self, name, value, attrs=None, renderer=None):
+        if attrs is None:
+            attrs = {}
+        
+        # Add required attributes for multiple file input
+        attrs.update({
+            'type': 'file',
+            'multiple': True,
+            'accept': 'image/*'
+        })
+        
+        # Build the attribute string
+        attr_str = ' '.join([f'{k}="{v}"' for k, v in attrs.items()])
+        
+        html = f'<input name="{name}" {attr_str}>'
+        return mark_safe(html)
+    
+    def value_from_datadict(self, data, files, name):
+        """Get multiple files from the uploaded data"""
+        upload = files.getlist(name)
+        if not upload:
+            return None
+        return upload
+
+class MultipleFileField(forms.Field):
+    """Custom field that handles multiple file uploads"""
+    
+    widget = MultipleFileInput
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def clean(self, data, initial=None):
+        if not data and not self.required:
+            return []
+        
+        if not data:
+            return []
+            
+        if not isinstance(data, list):
+            data = [data]
+        
+        result = []
+        for uploaded_file in data:
+            if uploaded_file:
+                # Basic validation
+                if hasattr(uploaded_file, 'content_type'):
+                    if not uploaded_file.content_type.startswith('image/'):
+                        continue
+                result.append(uploaded_file)
+        
+        return result
 
 
 class PropertyImageInline(admin.TabularInline):
     model = PropertyImage
-    extra = 0  # Don't show extra empty forms since we'll use bulk upload
+    extra = 1
     fields = ('image_preview', 'image', 'alt_text', 'is_primary', 'order')
     readonly_fields = ('image_preview',)
     
@@ -21,18 +82,13 @@ class PropertyImageInline(admin.TabularInline):
             )
         return "No image"
     image_preview.short_description = 'Preview'
-    
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['is_primary'].help_text = "Check this to make this the primary image"
-        return formset
 
 
 class PropertyListingAdminForm(forms.ModelForm):
-    """Custom form with multiple image upload field"""
+    """Custom form with bulk image upload"""
     
-    bulk_images = forms.FileField(
-        widget=MultipleImagePreviewWidget(),
+    # Use our custom MultipleFileField
+    bulk_images = MultipleFileField(
         required=False,
         help_text="Select multiple images at once. Hold Ctrl/Cmd to select multiple files.",
         label="Bulk Upload Images"
@@ -49,21 +105,21 @@ class PropertyListingAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Move bulk_images field to the top for better UX
+        # Move bulk_images field to the top
         if 'bulk_images' in self.fields:
             bulk_images_field = self.fields.pop('bulk_images')
-            # Insert at the beginning
             new_fields = {'bulk_images': bulk_images_field}
             new_fields.update(self.fields)
             self.fields = new_fields
 
+
 @admin.register(PropertyListing)
 class PropertyListingAdmin(admin.ModelAdmin):
     form = PropertyListingAdminForm
-    list_display = ('title', 'suburb', 'province', 'listing_price', 'agent_display', 'is_active', 'is_featured', 'view_count', 'image_count', 'image_preview')
+    list_display = ('title', 'suburb', 'province', 'listing_price', 'agent_display', 'is_active', 'is_featured', 'view_count', 'image_count')
     list_filter = ('province', 'property_type', 'is_active', 'is_featured', 'is_pet_friendly', 'has_pool', 'created_at', 'agent')
     search_fields = ('title', 'description', 'suburb', 'street_address', 'agent__email', 'agent__first_name', 'agent__last_name')
-    readonly_fields = ('id', 'view_count', 'created_at', 'updated_at', 'published_at', 'primary_image_display', 'images_summary')
+    readonly_fields = ('id', 'view_count', 'created_at', 'updated_at', 'published_at', 'images_summary')
     inlines = [PropertyImageInline]
     list_editable = ('is_active', 'is_featured')
     list_per_page = 20
@@ -72,7 +128,7 @@ class PropertyListingAdmin(admin.ModelAdmin):
         ('Bulk Image Upload', {
             'fields': ('bulk_images',),
             'classes': ('wide',),
-            'description': 'Upload multiple images at once using the field below. Individual images can still be managed in the "Images" section at the bottom of this page.'
+            'description': 'Upload multiple images at once. Hold Ctrl/Cmd to select multiple files.'
         }),
         ('Basic Information', {
             'fields': ('title', 'description'),
@@ -98,12 +154,11 @@ class PropertyListingAdmin(admin.ModelAdmin):
             'fields': ('is_active', 'is_featured'),
             'classes': ('wide',)
         }),
-        ('Agent Assignment (Optional)', {
+        ('Agent Assignment', {
             'fields': ('agent',),
-            'classes': ('wide',),
-            'description': 'You can optionally assign this property to a specific agent. Leave blank if no agent assignment is needed.'
+            'classes': ('wide',)
         }),
-        ('Current Images Summary', {
+        ('Current Images', {
             'fields': ('images_summary',),
             'classes': ('collapse',)
         }),
@@ -139,28 +194,6 @@ class PropertyListingAdmin(admin.ModelAdmin):
         return format_html('<span style="color: #dc3545;">No images</span>')
     image_count.short_description = 'Images'
     
-    def image_preview(self, obj):
-        """Show a small preview of the primary image in the list view"""
-        primary_image = obj.primary_image
-        if primary_image and primary_image.image:
-            return format_html(
-                '<img src="{}" style="max-height: 40px; max-width: 40px; border-radius: 4px;" />',
-                primary_image.image.url
-            )
-        return format_html('<span style="color: #999;">No image</span>')
-    image_preview.short_description = 'Image'
-    
-    def primary_image_display(self, obj):
-        """Show the primary image in the detail view"""
-        primary_image = obj.primary_image
-        if primary_image and primary_image.image:
-            return format_html(
-                '<img src="{}" style="max-height: 200px; max-width: 300px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />',
-                primary_image.image.url
-            )
-        return format_html('<span style="color: #999;">No primary image set</span>')
-    primary_image_display.short_description = 'Primary Image'
-    
     def images_summary(self, obj):
         """Show a summary of all images"""
         images = obj.images.all()
@@ -195,13 +228,50 @@ class PropertyListingAdmin(admin.ModelAdmin):
         # Save the main object first
         super().save_model(request, obj, form, change)
         
-        # Handle bulk image uploads
-        bulk_images = request.FILES.getlist('bulk_images')
-        if bulk_images:
-            self.process_bulk_images(obj, bulk_images, request)
+        # Debug: Print comprehensive information
+        print(f"\n=== BULK IMAGE UPLOAD DEBUG ===")
+        print(f"Form is valid: {form.is_valid()}")
+        print(f"Form errors: {form.errors}")
+        print(f"Request method: {request.method}")
+        print(f"Content-Type: {request.content_type}")
+        print(f"POST data keys: {list(request.POST.keys())}")
+        print(f"FILES data keys: {list(request.FILES.keys())}")
+        
+        # Print all FILES for debugging
+        for key, file_obj in request.FILES.items():
+            print(f"FILE '{key}': {file_obj.name} ({file_obj.size} bytes)")
+        
+        # Try getlist for bulk_images
+        file_list = request.FILES.getlist('bulk_images')
+        print(f"request.FILES.getlist('bulk_images'): {len(file_list)} files")
+        for i, f in enumerate(file_list):
+            print(f"  File {i}: {f.name} ({f.size} bytes)")
+        
+        # Check form cleaned_data
+        if hasattr(form, 'cleaned_data'):
+            print(f"Form cleaned_data keys: {list(form.cleaned_data.keys())}")
+            if 'bulk_images' in form.cleaned_data:
+                bulk_images = form.cleaned_data['bulk_images']
+                print(f"Form cleaned_data bulk_images: {bulk_images}")
+                print(f"Type: {type(bulk_images)}")
+                print(f"Length: {len(bulk_images) if bulk_images else 0}")
+                
+                if bulk_images and len(bulk_images) > 0:
+                    print(f"Processing {len(bulk_images)} images from form.cleaned_data")
+                    self.process_bulk_images(obj, bulk_images, request)
+                else:
+                    print("No images in cleaned_data")
+            else:
+                print("'bulk_images' not found in form.cleaned_data")
+        else:
+            print("Form has no cleaned_data")
+        
+        print(f"=== END DEBUG ===\n")
     
     def process_bulk_images(self, property_listing, images, request):
         """Process multiple uploaded images"""
+        print(f"Processing {len(images)} images for property {property_listing.id}")
+        
         # Get the current highest order number
         last_order = 0
         existing_images = property_listing.images.all()
@@ -214,8 +284,11 @@ class PropertyListingAdmin(admin.ModelAdmin):
         created_count = 0
         for i, image_file in enumerate(images):
             try:
+                print(f"Processing image {i+1}: {image_file.name}, type: {image_file.content_type}")
+                
                 # Validate that it's actually an image file
                 if not image_file.content_type.startswith('image/'):
+                    print(f"Skipping non-image file: {image_file.name}")
                     continue
                 
                 # Create new PropertyImage
@@ -223,21 +296,21 @@ class PropertyListingAdmin(admin.ModelAdmin):
                     property=property_listing,
                     image=image_file,
                     order=last_order + i + 1,
-                    is_primary=(not has_primary and i == 0),  # Set first image as primary if no primary exists
+                    is_primary=(not has_primary and i == 0),
                     alt_text=f"Property image {last_order + i + 1}"
                 )
                 property_image.save()
                 created_count += 1
+                print(f"Created PropertyImage {property_image.id}")
                 
                 # After creating the first image, we have a primary
                 if not has_primary and i == 0:
                     has_primary = True
                     
             except Exception as e:
-                # Log the error but continue with other images
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error uploading image {image_file.name}: {str(e)}")
+                print(f"Error uploading image {image_file.name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 continue
         
         # Add success message
@@ -247,58 +320,9 @@ class PropertyListingAdmin(admin.ModelAdmin):
                 request,
                 f"Successfully uploaded {created_count} image{'s' if created_count != 1 else ''}."
             )
-    
-    def get_form(self, request, obj=None, **kwargs):
-        """Customize the form for better admin experience"""
-        form_class = super().get_form(request, obj, **kwargs)
-        
-        # Create a new form class that ensures proper enctype
-        class PropertyListingAdminFormWithEnctype(form_class):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                # Ensure the form can handle file uploads
-                self.enctype = 'multipart/form-data'
-        
-        return PropertyListingAdminFormWithEnctype
-    
-    # Override to ensure form has proper enctype
-    def add_view(self, request, form_url='', extra_context=None):
-        extra_context = extra_context or {}
-        extra_context.update({
-            'show_save_and_add_another': False,
-            'show_save_and_continue': False,
-        })
-        return super().add_view(request, form_url, extra_context)
-    
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        extra_context = extra_context or {}
-        extra_context.update({
-            'show_save_and_add_another': False,
-            'show_save_and_continue': False,
-        })
-        return super().change_view(request, object_id, form_url, extra_context)
-    
-    actions = ['make_active', 'make_inactive', 'make_featured', 'remove_featured']
-    
-    def make_active(self, request, queryset):
-        updated = queryset.update(is_active=True)
-        self.message_user(request, f'{updated} properties have been activated.')
-    make_active.short_description = "Activate selected properties"
-    
-    def make_inactive(self, request, queryset):
-        updated = queryset.update(is_active=False)
-        self.message_user(request, f'{updated} properties have been deactivated.')
-    make_inactive.short_description = "Deactivate selected properties"
-    
-    def make_featured(self, request, queryset):
-        updated = queryset.update(is_featured=True)
-        self.message_user(request, f'{updated} properties have been marked as featured.')
-    make_featured.short_description = "Mark selected properties as featured"
-    
-    def remove_featured(self, request, queryset):
-        updated = queryset.update(is_featured=False)
-        self.message_user(request, f'{updated} properties have been removed from featured.')
-    remove_featured.short_description = "Remove selected properties from featured"
+            print(f"Successfully created {created_count} images")
+        else:
+            print("No images were created")
 
 
 @admin.register(PropertyImage)
