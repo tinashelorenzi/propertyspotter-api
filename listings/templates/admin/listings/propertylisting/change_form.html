@@ -1,13 +1,58 @@
 {% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | Property Listings | Django Admin{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* Ensure proper form styling */
+    form[enctype="multipart/form-data"] {
+        border: 2px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .multiple-image-upload-widget {
+        margin: 20px 0;
+    }
+    
+    .errorlist {
+        background: #ffebee;
+        color: #c62828;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+</style>
+{% endblock %}
 
 {% block form_top %}
+{{ block.super }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Ensure the form has the correct enctype for file uploads
-    const form = document.querySelector('#propertylisting_form, form[method="post"]');
-    if (form) {
-        form.setAttribute('enctype', 'multipart/form-data');
-    }
+    console.log('Setting up form enctype...');
+    
+    // Find the main admin form
+    const forms = document.querySelectorAll('form[method="post"]');
+    
+    forms.forEach(function(form) {
+        if (!form.getAttribute('enctype')) {
+            form.setAttribute('enctype', 'multipart/form-data');
+            console.log('Set enctype to multipart/form-data');
+        }
+    });
+    
+    // Also ensure any form with file inputs has the correct enctype
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    fileInputs.forEach(function(input) {
+        const form = input.closest('form');
+        if (form && !form.getAttribute('enctype')) {
+            form.setAttribute('enctype', 'multipart/form-data');
+            console.log('Set enctype for form with file input');
+        }
+    });
 });
 </script>
 {% endblock %}

@@ -25,6 +25,9 @@ class MultipleImagePreviewWidget(MultipleFileInput):
     """
     
     def __init__(self, attrs=None):
+        if attrs is None:
+            attrs = {}
+        attrs.update({'multiple': True, 'accept': 'image/*'})
         super().__init__(attrs)
         
     def format_value(self, value):
@@ -158,6 +161,13 @@ class MultipleImagePreviewWidget(MultipleFileInput):
             const fileInput = document.querySelector('input[name="' + fieldName + '"]');
             
             if (fileInput) {{
+                // Ensure the parent form has the correct enctype
+                const form = fileInput.closest('form');
+                if (form && !form.getAttribute('enctype')) {{
+                    form.setAttribute('enctype', 'multipart/form-data');
+                    console.log('Set form enctype for file upload');
+                }}
+                
                 fileInput.addEventListener('change', function(e) {{
                     handleFiles(Array.from(e.target.files));
                 }});

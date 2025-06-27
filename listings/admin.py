@@ -57,7 +57,6 @@ class PropertyListingAdminForm(forms.ModelForm):
             new_fields.update(self.fields)
             self.fields = new_fields
 
-
 @admin.register(PropertyListing)
 class PropertyListingAdmin(admin.ModelAdmin):
     form = PropertyListingAdminForm
@@ -251,21 +250,16 @@ class PropertyListingAdmin(admin.ModelAdmin):
     
     def get_form(self, request, obj=None, **kwargs):
         """Customize the form for better admin experience"""
-        form = super().get_form(request, obj, **kwargs)
+        form_class = super().get_form(request, obj, **kwargs)
         
-        # Add help text for better guidance
-        if 'title' in form.base_fields:
-            form.base_fields['title'].help_text = "Enter a descriptive title for the property"
-        if 'description' in form.base_fields:
-            form.base_fields['description'].help_text = "Provide a detailed description of the property"
-        if 'listing_price' in form.base_fields:
-            form.base_fields['listing_price'].help_text = "Enter the price in Rands (e.g., 2500000.00)"
-        if 'custom_property_type' in form.base_fields:
-            form.base_fields['custom_property_type'].help_text = "Use this field if the property type is not in the dropdown list"
-        if 'agent' in form.base_fields:
-            form.base_fields['agent'].help_text = "Optional: Assign this property to a specific agent. Leave blank if no agent assignment is needed."
+        # Create a new form class that ensures proper enctype
+        class PropertyListingAdminFormWithEnctype(form_class):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                # Ensure the form can handle file uploads
+                self.enctype = 'multipart/form-data'
         
-        return form
+        return PropertyListingAdminFormWithEnctype
     
     # Override to ensure form has proper enctype
     def add_view(self, request, form_url='', extra_context=None):
