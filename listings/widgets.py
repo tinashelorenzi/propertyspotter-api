@@ -19,11 +19,10 @@ class MultipleFileInput(forms.ClearableFileInput):
         return upload
 
 
-class MultipleImagePreviewWidget(forms.Widget):
+class MultipleImagePreviewWidget(MultipleFileInput):
     """
     A widget that shows existing images and allows uploading multiple new ones
     """
-    template_name = 'admin/widgets/multiple_image_preview.html'
     
     def __init__(self, attrs=None):
         super().__init__(attrs)
@@ -40,118 +39,211 @@ class MultipleImagePreviewWidget(forms.Widget):
             attrs = {}
         attrs.update({'multiple': True, 'accept': 'image/*'})
         
+        # Get the basic file input HTML
+        file_input = super().render(name, value, attrs, renderer)
+        
         html = f'''
         <div class="multiple-image-upload">
-            <div class="current-images" id="current-images-{name}">
-                <h4>Current Images:</h4>
-                <div class="image-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px;">
-                    <!-- Current images will be populated by JavaScript -->
+            <div class="upload-section" id="upload-section-{name}">
+                {file_input}
+                <div class="upload-help" style="margin-top: 10px; font-size: 12px; color: #666;">
+                    <strong>Select multiple images at once!</strong><br>
+                    Supported formats: JPG, PNG, GIF, WebP<br>
+                    Hold Ctrl/Cmd to select multiple files
                 </div>
             </div>
             
-            <div class="new-images-section">
-                <h4>Upload New Images:</h4>
-                <input type="file" name="{name}" multiple accept="image/*" 
-                       style="margin-bottom: 10px;" onchange="previewNewImages(this, '{name}')">
-                <div class="help-text" style="font-size: 11px; color: #666;">
-                    Hold Ctrl/Cmd to select multiple images at once. Supported formats: JPG, PNG, GIF, WebP
-                </div>
-                
-                <div id="new-images-preview-{name}" class="new-images-preview" 
-                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 15px;">
-                    <!-- New image previews will appear here -->
-                </div>
+            <div id="upload-progress-{name}" class="upload-progress" style="display: none; margin-top: 15px; padding: 15px; background: white; border-radius: 4px; border-left: 4px solid #28a745;">
+                <div class="progress-text" style="font-weight: 600; color: #28a745; margin-bottom: 5px;">Ready to upload images</div>
+                <div class="file-count" id="file-count-{name}" style="color: #666; font-size: 13px;"></div>
             </div>
+            
+            <div id="error-messages-{name}"></div>
+            
+            <div id="preview-container-{name}" class="preview-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-top: 20px;"></div>
         </div>
         
         <style>
-            .image-item {{
+            .multiple-image-upload {{
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 20px;
+                background: #f8f9fa;
+                margin: 10px 0;
+            }}
+            
+            .upload-section {{
+                background: white;
+                border: 2px dashed #ddd;
+                border-radius: 6px;
+                padding: 20px;
+                text-align: center;
+                margin-bottom: 20px;
+            }}
+            
+            .preview-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+                margin-top: 20px;
+            }}
+            
+            .image-preview-item {{
                 position: relative;
                 border: 1px solid #ddd;
-                border-radius: 4px;
+                border-radius: 6px;
                 overflow: hidden;
-                background: #f9f9f9;
+                background: white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }}
-            .image-item img {{
+            
+            .preview-image {{
                 width: 100%;
                 height: 120px;
                 object-fit: cover;
                 display: block;
             }}
-            .image-item .image-info {{
-                padding: 8px;
-                font-size: 11px;
-                background: white;
-                border-top: 1px solid #eee;
+            
+            .image-info {{
+                padding: 10px;
+                font-size: 12px;
+                line-height: 1.4;
             }}
-            .image-item .primary-badge {{
-                position: absolute;
-                top: 5px;
-                right: 5px;
-                background: #28a745;
-                color: white;
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: bold;
+            
+            .image-name {{
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 4px;
+                word-break: break-word;
             }}
+            
+            .image-details {{
+                color: #666;
+            }}
+            
             .remove-image {{
                 position: absolute;
-                top: 5px;
-                left: 5px;
+                top: 8px;
+                right: 8px;
                 background: #dc3545;
                 color: white;
                 border: none;
                 border-radius: 50%;
-                width: 20px;
-                height: 20px;
-                font-size: 12px;
+                width: 24px;
+                height: 24px;
+                font-size: 14px;
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
             }}
+            
+            .error-message {{
+                background: #f8d7da;
+                color: #721c24;
+                padding: 10px;
+                border-radius: 4px;
+                margin-top: 10px;
+                font-size: 13px;
+            }}
         </style>
         
         <script>
-            function previewNewImages(input, fieldName) {{
-                const previewContainer = document.getElementById('new-images-preview-' + fieldName);
-                previewContainer.innerHTML = '';
+        (function() {{
+            const fieldName = '{name}';
+            let selectedFiles = [];
+            const maxFileSize = 10 * 1024 * 1024; // 10MB
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            
+            const fileInput = document.querySelector('input[name="' + fieldName + '"]');
+            
+            if (fileInput) {{
+                fileInput.addEventListener('change', function(e) {{
+                    handleFiles(Array.from(e.target.files));
+                }});
+            }}
+            
+            function handleFiles(files) {{
+                const validFiles = [];
+                const errors = [];
                 
-                if (input.files) {{
-                    Array.from(input.files).forEach((file, index) => {{
-                        if (file.type.startsWith('image/')) {{
-                            const reader = new FileReader();
-                            reader.onload = function(e) {{
-                                const imageItem = document.createElement('div');
-                                imageItem.className = 'image-item';
-                                imageItem.innerHTML = `
-                                    <img src="${{e.target.result}}" alt="Preview">
-                                    <div class="image-info">
-                                        <div><strong>${{file.name}}</strong></div>
-                                        <div>Size: ${{(file.size / 1024 / 1024).toFixed(2)}} MB</div>
-                                        <div>Type: ${{file.type}}</div>
-                                    </div>
-                                `;
-                                previewContainer.appendChild(imageItem);
-                            }};
-                            reader.readAsDataURL(file);
-                        }}
-                    }});
+                files.forEach(file => {{
+                    // Validate file type
+                    if (!allowedTypes.includes(file.type)) {{
+                        errors.push(`${{file.name}}: Invalid file type. Please use JPG, PNG, GIF, or WebP.`);
+                        return;
+                    }}
                     
-                    // Show count
-                    const countDiv = document.createElement('div');
-                    countDiv.style.cssText = 'margin-top: 10px; font-weight: bold; color: #28a745;';
-                    countDiv.textContent = `${{input.files.length}} image(s) selected for upload`;
-                    previewContainer.appendChild(countDiv);
+                    // Validate file size
+                    if (file.size > maxFileSize) {{
+                        errors.push(`${{file.name}}: File too large. Maximum size is 10MB.`);
+                        return;
+                    }}
+                    
+                    validFiles.push(file);
+                }});
+                
+                // Show errors
+                displayErrors(errors);
+                
+                if (validFiles.length > 0) {{
+                    selectedFiles = validFiles;
+                    showProgress(validFiles.length);
+                    previewImages(validFiles);
                 }}
             }}
             
-            // Load current images when page loads
-            document.addEventListener('DOMContentLoaded', function() {{
-                // This would be populated from the backend if editing existing property
-                // For now, it's just a placeholder
-            }});
+            function showProgress(count) {{
+                const progressDiv = document.getElementById('upload-progress-{name}');
+                const countDiv = document.getElementById('file-count-{name}');
+                
+                if (progressDiv && countDiv) {{
+                    progressDiv.style.display = 'block';
+                    countDiv.textContent = `${{count}} image${{count !== 1 ? 's' : ''}} selected for upload`;
+                }}
+            }}
+            
+            function previewImages(files) {{
+                const container = document.getElementById('preview-container-{name}');
+                if (!container) return;
+                
+                container.innerHTML = '';
+                
+                files.forEach((file, index) => {{
+                    const reader = new FileReader();
+                    reader.onload = function(e) {{
+                        const imageItem = document.createElement('div');
+                        imageItem.className = 'image-preview-item';
+                        imageItem.innerHTML = `
+                            <img src="${{e.target.result}}" alt="Preview" class="preview-image">
+                            <div class="image-info">
+                                <div class="image-name">${{file.name}}</div>
+                                <div class="image-details">
+                                    ${{(file.size / 1024 / 1024).toFixed(2)}} MB<br>
+                                    ${{file.type.split('/')[1].toUpperCase()}}
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(imageItem);
+                    }};
+                    reader.readAsDataURL(file);
+                }});
+            }}
+            
+            function displayErrors(errors) {{
+                const errorContainer = document.getElementById('error-messages-{name}');
+                if (!errorContainer) return;
+                
+                errorContainer.innerHTML = '';
+                
+                if (errors.length > 0) {{
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message';
+                    errorDiv.innerHTML = '<strong>Upload Errors:</strong><br>' + errors.join('<br>');
+                    errorContainer.appendChild(errorDiv);
+                }}
+            }}
+        }})();
         </script>
         '''
         

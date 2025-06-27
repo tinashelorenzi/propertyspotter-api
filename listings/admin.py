@@ -199,9 +199,9 @@ class PropertyListingAdmin(admin.ModelAdmin):
         # Handle bulk image uploads
         bulk_images = request.FILES.getlist('bulk_images')
         if bulk_images:
-            self.process_bulk_images(obj, bulk_images)
+            self.process_bulk_images(obj, bulk_images, request)
     
-    def process_bulk_images(self, property_listing, images):
+    def process_bulk_images(self, property_listing, images, request):
         """Process multiple uploaded images"""
         # Get the current highest order number
         last_order = 0
@@ -215,6 +215,10 @@ class PropertyListingAdmin(admin.ModelAdmin):
         created_count = 0
         for i, image_file in enumerate(images):
             try:
+                # Validate that it's actually an image file
+                if not image_file.content_type.startswith('image/'):
+                    continue
+                
                 # Create new PropertyImage
                 property_image = PropertyImage(
                     property=property_listing,
@@ -232,14 +236,16 @@ class PropertyListingAdmin(admin.ModelAdmin):
                     
             except Exception as e:
                 # Log the error but continue with other images
-                print(f"Error uploading image {image_file.name}: {str(e)}")
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error uploading image {image_file.name}: {str(e)}")
                 continue
         
         # Add success message
         if created_count > 0:
             from django.contrib import messages
             messages.success(
-                None,  # request will be passed by Django
+                request,
                 f"Successfully uploaded {created_count} image{'s' if created_count != 1 else ''}."
             )
     
@@ -260,6 +266,23 @@ class PropertyListingAdmin(admin.ModelAdmin):
             form.base_fields['agent'].help_text = "Optional: Assign this property to a specific agent. Leave blank if no agent assignment is needed."
         
         return form
+    
+    # Override to ensure form has proper enctype
+    def add_view(self, request, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'show_save_and_add_another': False,
+            'show_save_and_continue': False,
+        })
+        return super().add_view(request, form_url, extra_context)
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'show_save_and_add_another': False,
+            'show_save_and_continue': False,
+        })
+        return super().change_view(request, object_id, form_url, extra_context)
     
     actions = ['make_active', 'make_inactive', 'make_featured', 'remove_featured']
     
